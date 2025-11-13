@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "render:build": "next build",
+    "render:start": "next start -p $PORT"
   },
   "dependencies": {
     "@ai-sdk/google": "^1.1.25",
