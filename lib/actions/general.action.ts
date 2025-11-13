@@ -95,6 +95,11 @@ export async function getLatestInterviews(
 ): Promise<Interview[] | null> {
   const { userId, limit = 20 } = params;
 
+  // Validate userId before querying to avoid undefined value error
+  if (!userId || typeof userId !== "string") {
+    return [];
+  }
+
   const interviews = await db
     .collection("interviews")
     .orderBy("createdAt", "desc")
@@ -112,6 +117,11 @@ export async function getLatestInterviews(
 export async function getInterviewsByUserId(
   userId: string
 ): Promise<Interview[] | null> {
+  // Validate userId before querying to avoid undefined value error
+  if (!userId || typeof userId !== "string") {
+    return [];
+  }
+
   const interviews = await db
     .collection("interviews")
     .where("userId", "==", userId)
