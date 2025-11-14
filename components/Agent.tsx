@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { cn } from "@/lib/utils";
-import { vapi } from "@/lib/vapi.sdk";
+import { vapi, getVapiSessionToken } from "@/lib/vapi.sdk";
 import { interviewer } from "@/constants";
 import { createFeedback } from "@/lib/actions/general.action";
 
@@ -117,26 +117,36 @@ const Agent = ({
   const handleCall = async () => {
     setCallStatus(CallStatus.CONNECTING);
 
-    if (type === "generate") {
-      await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!, {
-        variableValues: {
-          username: userName,
-          userid: userId,
-        },
-      });
-    } else {
-      let formattedQuestions = "";
-      if (questions) {
-        formattedQuestions = questions
-          .map((question) => `- ${question}`)
-          .join("\n");
-      }
+    try {
+      // Get session token from backend to bypass CORS issues
+      const sessionToken = await getVapiSessionToken(userId!);
+      
+      if (type === "generate") {
+        await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!, {
+          token: sessionToken,
+          variableValues: {
+            username: userName,
+            userid: userId,
+          },
+        });
+      } else {
+        let formattedQuestions = "";
+        if (questions) {
+          formattedQuestions = questions
+            .map((question) => `- ${question}`)
+            .join("\n");
+        }
 
-      await vapi.start(interviewer, {
-        variableValues: {
-          questions: formattedQuestions,
-        },
-      });
+        await vapi.start(interviewer, {
+          token: sessionToken,
+          variableValues: {
+            questions: formattedQuestions,
+          },
+        });
+      }
+    } catch (error) {
+      console.error("Error starting call:", error);
+      setCallStatus(CallStatus.INACTIVE);
     }
   };
 
