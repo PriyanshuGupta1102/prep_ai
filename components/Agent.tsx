@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { cn } from "@/lib/utils";
-import { vapi, getVapiSessionToken } from "@/lib/vapi.sdk";
+import { vapi } from "@/lib/vapi.sdk";
 import { interviewer } from "@/constants";
 import { createFeedback } from "@/lib/actions/general.action";
 
@@ -118,12 +118,8 @@ const Agent = ({
     setCallStatus(CallStatus.CONNECTING);
 
     try {
-      // Get session token from backend to bypass CORS issues
-      const sessionToken = await getVapiSessionToken(userId!);
-      
       if (type === "generate") {
         await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!, {
-          token: sessionToken,
           variableValues: {
             username: userName,
             userid: userId,
@@ -138,7 +134,6 @@ const Agent = ({
         }
 
         await vapi.start(interviewer, {
-          token: sessionToken,
           variableValues: {
             questions: formattedQuestions,
           },
