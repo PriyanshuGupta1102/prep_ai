@@ -12,7 +12,17 @@ import {
 
 async function Home() {
   const user = await getCurrentUser();
-
+  if (!user?.id) {
+    return (
+      <section className="flex flex-col items-center justify-center h-[60vh] gap-4">
+        <h2 className="text-2xl font-semibold">Welcome to AI Interviews</h2>
+        <p className="text-lg text-gray-600">Please sign in to view your interviews.</p>
+        <Button asChild>
+          <Link href="/sign-in">Sign In</Link>
+        </Button>
+      </section>
+    );
+  }
   const [userInterviews, allInterview] = await Promise.all([
     getInterviewsByUserId(user?.id!),
     getLatestInterviews({ userId: user?.id! }),

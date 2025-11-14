@@ -69,19 +69,30 @@ export async function signUp(params: SignUpParams) {
 
 export async function signIn(params: SignInParams) {
   const { email, idToken } = params;
-
   try {
-    const userRecord = await auth.getUserByEmail(email);
-    if (!userRecord)
-      return {
-        success: false,
-        message: "User does not exist. Create an account.",
-      };
+    // auth.getUserByEmail throws if the user doesn't exist. Handle that case explicitly
+    let userRecord;
+    try {
+      userRecord = await auth.getUserByEmail(email);
+    } catch (err: any) {
+      // If user is not found, return a friendly message instead of letting the error bubble up
+      if (err?.code === "auth/user-not-found" || err?.codePrefix === "auth") {
+        return {
+          success: false,
+          message: "User does not exist. Create an account.",
+        };
+      }
 
+      // Unknown auth error, rethrow to outer catch
+      throw err;
+    }
+
+    // Create the session cookie
     await setSessionCookie(idToken);
-  } catch (error: any) {
-    console.log("");
 
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error signing in:", error);
     return {
       success: false,
       message: "Failed to log into account. Please try again.",
