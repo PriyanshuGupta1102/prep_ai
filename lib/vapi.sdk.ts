@@ -1,5 +1,9 @@
 import Vapi from "@vapi-ai/web";
 
+// Vapi Configuration - Public API Key and Workflow ID
+const VAPI_PUBLIC_KEY = "f563cad6-1b2c-4d05-b7a6-15537778a4ac";
+const VAPI_WORKFLOW_ID = "2757e744-d97e-4d90-b429-ce4232fa5ef3";
+
 interface WorkflowConfig {
   publicApiKey: string;
   workflowId: string;
@@ -145,8 +149,16 @@ export function createInterviewWorkflow(config: WorkflowConfig) {
 
 /**
  * Initialize and export a default instance for use in components
- * This can be configured with your public key and workflow ID
+ * Uses hardcoded public API key and workflow ID
  */
-export const createVapiWorkflow = (publicApiKey: string, workflowId: string) => {
-  return createInterviewWorkflow({ publicApiKey, workflowId });
+export const createVapiWorkflow = (publicApiKey?: string, workflowId?: string) => {
+  return createInterviewWorkflow({
+    publicApiKey: publicApiKey || VAPI_PUBLIC_KEY,
+    workflowId: workflowId || VAPI_WORKFLOW_ID,
+  });
 };
+
+/**
+ * Default workflow instance with hardcoded credentials
+ */
+export const defaultWorkflow = createVapiWorkflow();
