@@ -37,19 +37,9 @@ const Agent = ({
 
   // Initialize Vapi workflow on mount
   useEffect(() => {
-    const publicApiKey = process.env.NEXT_PUBLIC_VAPI_WEB_TOKEN!;
-    const workflowId =
-      type === "generate"
-        ? process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!
-        : process.env.NEXT_PUBLIC_VAPI_INTERVIEW_WORKFLOW_ID;
-
-    if (!publicApiKey || !workflowId) {
-      console.error("Missing Vapi configuration");
-      return;
-    }
-
-    // Create workflow instance
-    workflowRef.current = createVapiWorkflow(publicApiKey, workflowId);
+    // Create workflow instance using hardcoded credentials from SDK
+    // No need to pass API key or workflow ID as they're built into the SDK
+    workflowRef.current = createVapiWorkflow();
 
     // Setup event listeners
     workflowRef.current.onCallStart(() => {
