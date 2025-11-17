@@ -1,12 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 import { cn } from "@/lib/utils";
-import { vapi } from "@/lib/vapi.sdk";
-import { interviewer } from "@/constants";
+import { createVapiWorkflow } from "@/lib/vapi.sdk";
 import { createFeedback } from "@/lib/actions/general.action";
 
 enum CallStatus {
@@ -34,61 +33,74 @@ const Agent = ({
   const [messages, setMessages] = useState<SavedMessage[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastMessage, setLastMessage] = useState<string>("");
+  const workflowRef = useRef<any>(null);
 
+  // Initialize Vapi workflow on mount
   useEffect(() => {
-    const onCallStart = () => {
+    const publicApiKey = process.env.NEXT_PUBLIC_VAPI_WEB_TOKEN!;
+    const workflowId =
+      type === "generate"
+        ? process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!
+        : process.env.NEXT_PUBLIC_VAPI_INTERVIEW_WORKFLOW_ID;
+
+    if (!publicApiKey || !workflowId) {
+      console.error("Missing Vapi configuration");
+      return;
+    }
+
+    // Create workflow instance
+    workflowRef.current = createVapiWorkflow(publicApiKey, workflowId);
+
+    // Setup event listeners
+    workflowRef.current.onCallStart(() => {
       setCallStatus(CallStatus.ACTIVE);
-    };
+      console.log("Interview call started");
+    });
 
-    const onCallEnd = () => {
+    workflowRef.current.onCallEnd(() => {
       setCallStatus(CallStatus.FINISHED);
-    };
+      console.log("Interview call ended");
+    });
 
-    const onMessage = (message: Message) => {
+    workflowRef.current.onMessage((message: any) => {
       if (message.type === "transcript" && message.transcriptType === "final") {
         const newMessage = { role: message.role, content: message.transcript };
         setMessages((prev) => [...prev, newMessage]);
+      } else if (message.type === "workflow-step") {
+        console.log("Workflow step:", message.step);
+      } else if (message.type === "function-call") {
+        console.log("Function called:", message.functionCall?.name);
+      }
+    });
+
+    workflowRef.current.onSpeechStart(() => {
+      setIsSpeaking(true);
+    });
+
+    workflowRef.current.onSpeechEnd(() => {
+      setIsSpeaking(false);
+    });
+
+    workflowRef.current.onError((error: Error) => {
+      console.error("Workflow error:", error);
+    });
+
+    // Cleanup on unmount
+    return () => {
+      if (workflowRef.current) {
+        workflowRef.current.destroy();
       }
     };
+  }, [type]);
 
-    const onSpeechStart = () => {
-      console.log("speech start");
-      setIsSpeaking(true);
-    };
-
-    const onSpeechEnd = () => {
-      console.log("speech end");
-      setIsSpeaking(false);
-    };
-
-    const onError = (error: Error) => {
-      console.log("Error:", error);
-    };
-
-    vapi.on("call-start", onCallStart);
-    vapi.on("call-end", onCallEnd);
-    vapi.on("message", onMessage);
-    vapi.on("speech-start", onSpeechStart);
-    vapi.on("speech-end", onSpeechEnd);
-    vapi.on("error", onError);
-
-    return () => {
-      vapi.off("call-start", onCallStart);
-      vapi.off("call-end", onCallEnd);
-      vapi.off("message", onMessage);
-      vapi.off("speech-start", onSpeechStart);
-      vapi.off("speech-end", onSpeechEnd);
-      vapi.off("error", onError);
-    };
-  }, []);
-
+  // Handle feedback generation and navigation
   useEffect(() => {
     if (messages.length > 0) {
       setLastMessage(messages[messages.length - 1].content);
     }
 
     const handleGenerateFeedback = async (messages: SavedMessage[]) => {
-      console.log("handleGenerateFeedback");
+      console.log("Generating feedback from transcript");
 
       const { success, feedbackId: id } = await createFeedback({
         interviewId: interviewId!,
@@ -115,39 +127,39 @@ const Agent = ({
   }, [messages, callStatus, feedbackId, interviewId, router, type, userId]);
 
   const handleCall = async () => {
+    if (!workflowRef.current) {
+      console.error("Workflow not initialized");
+      return;
+    }
+
     setCallStatus(CallStatus.CONNECTING);
 
     try {
-      if (type === "generate") {
-        await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!, {
-          variableValues: {
-            username: userName,
-            userid: userId,
-          },
-        });
-      } else {
-        let formattedQuestions = "";
-        if (questions) {
-          formattedQuestions = questions
-            .map((question) => `- ${question}`)
-            .join("\n");
-        }
+      const variableValues: Record<string, any> = {
+        username: userName,
+        userid: userId,
+      };
 
-        await vapi.start(interviewer, {
-          variableValues: {
-            questions: formattedQuestions,
-          },
-        });
+      // Add questions if this is an interview-type call
+      if (type !== "generate" && questions) {
+        const formattedQuestions = questions
+          .map((question) => `- ${question}`)
+          .join("\n");
+        variableValues.questions = formattedQuestions;
       }
+
+      workflowRef.current.start(variableValues);
     } catch (error) {
-      console.error("Error starting call:", error);
+      console.error("Error starting workflow:", error);
       setCallStatus(CallStatus.INACTIVE);
     }
   };
 
   const handleDisconnect = () => {
+    if (workflowRef.current) {
+      workflowRef.current.stop();
+    }
     setCallStatus(CallStatus.FINISHED);
-    vapi.stop();
   };
 
   return (
