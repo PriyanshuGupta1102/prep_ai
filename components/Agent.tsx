@@ -37,48 +37,80 @@ const Agent = ({
 
   // Initialize Vapi workflow on mount
   useEffect(() => {
-    // Create workflow instance using hardcoded credentials from SDK
-    // No need to pass API key or workflow ID as they're built into the SDK
+    // Create a new workflow instance for this component
+    // Hardcoded credentials are included in createVapiWorkflow()
     workflowRef.current = createVapiWorkflow();
 
-    // Setup event listeners
+    if (!workflowRef.current) {
+      console.error("[Agent] Failed to create workflow");
+      return;
+    }
+
+    // Setup call start handler
     workflowRef.current.onCallStart(() => {
       setCallStatus(CallStatus.ACTIVE);
-      console.log("Interview call started");
+      console.log("[Agent] Interview call started - listening mode active");
     });
 
+    // Setup call end handler - triggers feedback generation
     workflowRef.current.onCallEnd(() => {
       setCallStatus(CallStatus.FINISHED);
-      console.log("Interview call ended");
-    });
-
-    workflowRef.current.onMessage((message: any) => {
-      if (message.type === "transcript" && message.transcriptType === "final") {
-        const newMessage = { role: message.role, content: message.transcript };
-        setMessages((prev) => [...prev, newMessage]);
-      } else if (message.type === "workflow-step") {
-        console.log("Workflow step:", message.step);
-      } else if (message.type === "function-call") {
-        console.log("Function called:", message.functionCall?.name);
+      console.log("[Agent] Interview call ended");
+      // Get final transcript from workflow
+      const transcript = workflowRef.current?.getTranscript?.();
+      if (transcript && transcript.length > 0) {
+        console.log("[Agent] Transcript collected:", transcript);
       }
     });
 
+    // Setup message handler for transcripts and workflow events
+    workflowRef.current.onMessage((message: any) => {
+      if (message.type === "transcript" && message.transcriptType === "final") {
+        const newMessage = {
+          role: message.role || "user",
+          content: message.transcript,
+        };
+        setMessages((prev) => [...prev, newMessage]);
+        console.log(`[Agent] Message [${message.role}]:`, message.transcript);
+      } else if (message.type === "workflow-step") {
+        console.log("[Agent] Workflow step transition:", message.step?.name);
+      } else if (message.type === "function-call") {
+        console.log("[Agent] Function call in workflow:", message.functionCall?.name);
+      }
+    });
+
+    // Setup workflow step handler
+    workflowRef.current.onWorkflowStep?.((step: any) => {
+      console.log("[Agent] Workflow node entered:", step?.name || "unknown");
+    });
+
+    // Setup function call handler
+    workflowRef.current.onFunctionCall?.((functionCall: any) => {
+      console.log("[Agent] Workflow function executed:", functionCall?.name);
+    });
+
+    // Setup speech detection
     workflowRef.current.onSpeechStart(() => {
       setIsSpeaking(true);
+      console.log("[Agent] User is speaking");
     });
 
     workflowRef.current.onSpeechEnd(() => {
       setIsSpeaking(false);
+      console.log("[Agent] User stopped speaking");
     });
 
+    // Setup error handler
     workflowRef.current.onError((error: Error) => {
-      console.error("Workflow error:", error);
+      console.error("[Agent] Workflow error occurred:", error);
+      setCallStatus(CallStatus.INACTIVE);
     });
 
-    // Cleanup on unmount
+    // Cleanup on component unmount
     return () => {
       if (workflowRef.current) {
-        workflowRef.current.destroy();
+        console.log("[Agent] Cleaning up workflow on unmount");
+        workflowRef.current.destroy?.();
       }
     };
   }, [type]);
@@ -118,38 +150,51 @@ const Agent = ({
 
   const handleCall = async () => {
     if (!workflowRef.current) {
-      console.error("Workflow not initialized");
+      console.error("[Agent] Workflow not initialized");
+      return;
+    }
+
+    if (workflowRef.current.isConnected?.()) {
+      console.warn("[Agent] Workflow already connected");
       return;
     }
 
     setCallStatus(CallStatus.CONNECTING);
 
     try {
+      // Build variable values to pass to workflow nodes
+      // These are used in workflow nodes via liquid template syntax: {{ variable_name }}
       const variableValues: Record<string, any> = {
-        username: userName,
-        userid: userId,
+        username: userName || "Candidate",
+        userid: userId || "unknown",
       };
 
-      // Add questions if this is an interview-type call
-      if (type !== "generate" && questions) {
+      // Add interview questions if this is an interview-type call
+      if (type !== "generate" && questions && questions.length > 0) {
+        // Format questions for the workflow
         const formattedQuestions = questions
-          .map((question) => `- ${question}`)
+          .map((question, index) => `${index + 1}. ${question}`)
           .join("\n");
         variableValues.questions = formattedQuestions;
+        console.log("[Agent] Interview questions passed to workflow:", variableValues.questions);
       }
 
+      console.log("[Agent] Starting workflow with variables:", variableValues);
+
+      // Start the workflow with the prepared variables
       workflowRef.current.start(variableValues);
     } catch (error) {
-      console.error("Error starting workflow:", error);
+      console.error("[Agent] Error starting workflow:", error);
       setCallStatus(CallStatus.INACTIVE);
     }
   };
 
   const handleDisconnect = () => {
-    if (workflowRef.current) {
+    if (workflowRef.current && workflowRef.current.isConnected?.()) {
+      console.log("[Agent] Disconnecting from workflow");
       workflowRef.current.stop();
+      setCallStatus(CallStatus.FINISHED);
     }
-    setCallStatus(CallStatus.FINISHED);
   };
 
   return (
