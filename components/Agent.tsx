@@ -102,8 +102,20 @@ const Agent = ({
 
     // Setup error handler
     workflowRef.current.onError((error: Error) => {
-      console.error("[Agent] Workflow error occurred:", error);
+      const errorMessage = error?.message || String(error) || "Unknown workflow error";
+      console.error("[Agent] Workflow error occurred:", errorMessage);
       setCallStatus(CallStatus.INACTIVE);
+      
+      // Show user-friendly error message
+      if (errorMessage.includes("API Key") || errorMessage.includes("401")) {
+        console.error("[Agent] Authentication error - Check Vapi API credentials");
+      } else if (errorMessage.includes("Workflow ID") || errorMessage.includes("404")) {
+        console.error("[Agent] Workflow not found - Check VAPI_WORKFLOW_ID configuration");
+      } else if (errorMessage.includes("microphone") || errorMessage.includes("permission")) {
+        console.error("[Agent] Microphone permission denied - Please enable microphone access");
+      } else {
+        console.error("[Agent] Workflow failed - Check browser console for details");
+      }
     });
 
     // Cleanup on component unmount
@@ -151,6 +163,7 @@ const Agent = ({
   const handleCall = async () => {
     if (!workflowRef.current) {
       console.error("[Agent] Workflow not initialized");
+      alert("Error: Workflow not initialized. Please refresh the page.");
       return;
     }
 
@@ -184,8 +197,21 @@ const Agent = ({
       // Start the workflow with the prepared variables
       workflowRef.current.start(variableValues);
     } catch (error) {
-      console.error("[Agent] Error starting workflow:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error("[Agent] Error starting workflow:", errorMessage);
+      console.error("[Agent] Full error details:", error);
       setCallStatus(CallStatus.INACTIVE);
+      
+      // Show user-friendly error message
+      if (errorMessage.includes("API Key")) {
+        alert("Configuration Error: Invalid Vapi API Key. Contact support.");
+      } else if (errorMessage.includes("Workflow ID")) {
+        alert("Configuration Error: Invalid Vapi Workflow ID. Contact support.");
+      } else if (errorMessage.includes("microphone")) {
+        alert("Permission Error: Please enable microphone access to use this feature.");
+      } else {
+        alert(`Error: Failed to start interview. ${errorMessage}`);
+      }
     }
   };
 

@@ -27,6 +27,12 @@ interface WorkflowState {
  * - Message types: transcript, workflow-step, function-call
  */
 export function createInterviewWorkflow(config: WorkflowConfig) {
+  console.log("[Vapi SDK] Initializing workflow with config:", {
+    apiKeyPrefix: config.publicApiKey?.substring(0, 10),
+    workflowId: config.workflowId,
+    timestamp: new Date().toISOString(),
+  });
+
   const vapi = new Vapi(config.publicApiKey);
   const state: WorkflowState = {
     isConnected: false,
@@ -47,7 +53,8 @@ export function createInterviewWorkflow(config: WorkflowConfig) {
   // Setup Vapi event listeners following documentation patterns
   vapi.on("call-start", () => {
     state.isConnected = true;
-    console.log("[Vapi] Interview workflow call started");
+    console.log("[Vapi] Call initiated successfully at", new Date().toISOString());
+    console.log("[Vapi] Workflow ready to accept voice input");
     callStartCallback?.();
   });
 
@@ -97,10 +104,28 @@ export function createInterviewWorkflow(config: WorkflowConfig) {
     speechEndCallback?.();
   });
 
-  vapi.on("error", (error: Error) => {
-    console.error("[Vapi] Workflow error:", error);
+  vapi.on("error", (error: any) => {
+    // Extract error details from various error object formats
+    const errorMessage = error?.message || error?.toString() || JSON.stringify(error) || "Unknown error";
+    const errorCode = error?.code || error?.statusCode || "UNKNOWN";
+    const errorDetails = error?.details || error?.response || null;
+    
+    console.error("[Vapi] Workflow error occurred:", {
+      message: errorMessage,
+      code: errorCode,
+      details: errorDetails,
+      fullError: error,
+    });
+    
     state.isConnected = false;
-    errorCallback?.(error);
+    
+    // Create a more informative error object
+    const wrappedError = new Error(
+      `Vapi Workflow Error: ${errorMessage}. Code: ${errorCode}. ` +
+      `Check API key validity and workflow ID configuration.`
+    );
+    
+    errorCallback?.(wrappedError);
   });
 
   // Public API following Vapi Web SDK patterns
@@ -117,12 +142,25 @@ export function createInterviewWorkflow(config: WorkflowConfig) {
 
       try {
         console.log("[Vapi] Starting interview workflow with variables:", variableValues);
+        console.log("[Vapi] Using API Key:", config.publicApiKey?.substring(0, 10) + "...");
+        console.log("[Vapi] Using Workflow ID:", config.workflowId);
+        
+        // Verify credentials are provided
+        if (!config.publicApiKey) {
+          throw new Error("Vapi Public API Key is not configured. Check VAPI_PUBLIC_KEY constant.");
+        }
+        if (!config.workflowId) {
+          throw new Error("Vapi Workflow ID is not configured. Check VAPI_WORKFLOW_ID constant.");
+        }
+        
         // Pass variables to workflow nodes
         vapi.start(config.workflowId, {
           variableValues: variableValues || {},
         });
       } catch (error) {
-        console.error("[Vapi] Error starting workflow:", error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error("[Vapi] Error starting workflow:", errorMessage);
+        state.isConnected = false;
         throw error;
       }
     },
